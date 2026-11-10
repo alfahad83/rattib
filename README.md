@@ -1,0 +1,59 @@
+# رتّب
+
+منصة حجز مواعيد للصالونات والسبا والحلاقين والمدربين.
+
+- **صفحة العملاء** (`index.html`): تصفح المحلات، الحجز، الحجز الجماعي، الخدمة المنزلية، خصم الساعات الهادئة، قائمة الانتظار، النقاط، والتذكير بالموعد الجاي.
+- **لوحة المحل** (`business.html`): تسجيل المحل، الخدمات والأسعار، مواعيد اليوم (حضر / ما حضر / إلغاء / تأكيد من قائمة الانتظار)، الإحصائيات، ونسخ رابط الحجز المباشر.
+
+يشتغل كتطبيق ويب ينزل على الجوال (PWA)، بدون أي أدوات بناء: ملفات HTML وCSS وJavaScript فقط.
+
+## الوضع التجريبي
+
+إذا كانت القيم في `js/config.js` فاضية، التطبيق يشتغل في **وضع تجريبي**:
+البيانات تنحفظ على نفس الجهاز، وفيه محلات وحجوزات تجريبية، ولوحة المحل تفتح مباشرة كصاحب "صالون لمسة ناعمة".
+
+## ربط Firebase (عشان تصير الحجوزات حقيقية ومشتركة)
+
+1. ادخل [console.firebase.google.com](https://console.firebase.google.com) وأنشئ مشروع جديد باسم `rattib`.
+2. **Authentication** ← Get started ← فعّل **Email/Password** و **Anonymous**.
+3. **Firestore Database** ← Create database ← اختر المنطقة الأقرب ← Production mode.
+4. في Firestore ← تبويب **Rules** ← الصق محتوى ملف `firestore.rules` ← Publish.
+5. **Project settings** ← Your apps ← أيقونة الويب `</>` ← سجّل التطبيق ← انسخ قيم `firebaseConfig`.
+6. الصق القيم في `js/config.js` وارفع التعديل.
+7. في **Authentication ← Settings ← Authorized domains** أضف: `alfahad83.github.io`
+
+بعدها:
+- صاحب المحل يدخل `business.html` ← "سجّل محلك" ← ينشئ حساب ويعبّي بيانات محله.
+- العميل يدخل الصفحة الرئيسية ويحجز. دخوله يكون تلقائي (Anonymous) وبياناته مربوطة بجهازه.
+
+## النشر على GitHub Pages
+
+Settings ← Pages ← Source: **Deploy from a branch** ← Branch: `main` / `(root)` ← Save.
+
+الرابط: `https://alfahad83.github.io/rattib/`
+
+## هيكل الملفات
+
+```
+index.html          صفحة العملاء
+business.html       لوحة المحل
+css/style.css       التصميم
+js/app.js           منطق صفحة العملاء
+js/business.js      منطق لوحة المحل
+js/store.js         طبقة البيانات (Firebase أو الوضع التجريبي)
+js/common.js        أدوات مشتركة وأيقونات
+js/config.js        إعدادات Firebase
+js/seed.js          محلات الوضع التجريبي
+firestore.rules     قواعد أمان قاعدة البيانات
+sw.js               التشغيل بدون إنترنت
+```
+
+## الخطوات الجاية
+
+- الدفع الإلكتروني للعربون (مثل Moyasar أو Tap).
+- إشعارات (تأكيد الحجز، التذكير، فضى موعد من قائمة الانتظار) عبر Firebase Cloud Messaging.
+- التقييمات بعد كل موعد.
+- خريطة المحلات والبحث حسب المسافة.
+
+---
+فكرة وتطوير: فهد العنزي
