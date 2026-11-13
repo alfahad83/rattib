@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#3B1A5C">
+  <meta name="description" content="رتّب: احجز موعدك في الصالونات والسبا والحلاقين والمدربين بدون اتصال أو انتظار.">
+  <title>رتّب — احجز موعدك</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <div id="demo" class="demo-strip" hidden>وضع تجريبي: البيانات محفوظة على جهازك فقط</div>
+    <div id="app"><div class="loading">جاري التحميل…</div></div>
+  </div>
+
+  <dialog id="profile">
+    <form class="form" method="dialog" id="profile-form">
+      <h2>بياناتك للحجز</h2>
+      <p class="sub">نرسلها للمحل عشان يعرف صاحب الموعد. تنحفظ على جهازك للمرات الجاية.</p>
+      <label class="field">الاسم
+        <input name="name" required autocomplete="name" maxlength="40">
+      </label>
+      <label class="field">رقم الجوال
+        <input name="phone" required inputmode="tel" autocomplete="tel" pattern="05[0-9]{8}" placeholder="05XXXXXXXX" maxlength="10">
+        <span class="hint">يبدأ بـ 05 وفيه 10 أرقام</span>
+      </label>
+      <div class="actions">
+        <button class="btn" value="ok">متابعة</button>
+        <button class="btn ghost" value="cancel" formnovalidate>إلغاء</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  </script>
+</body>
+</html>

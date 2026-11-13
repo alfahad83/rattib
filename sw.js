@@ -1,6 +1,6 @@
 // Service worker: يخلي واجهة التطبيق تفتح بسرعة وحتى بدون إنترنت.
 // البيانات (Firebase) دايمًا تنجاب من الشبكة.
-const CACHE = 'rattib-v2';
+const CACHE = 'rattib-v4';
 const SHELL = [
   './', './index.html', './business.html', './css/style.css',
   './js/app.js', './js/motion.js', './js/business.js', './js/store.js', './js/common.js', './js/config.js', './js/seed.js',

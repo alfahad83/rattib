@@ -1,0 +1,17 @@
+{
+  "name": "رتّب — احجز موعدك",
+  "short_name": "رتّب",
+  "description": "احجز في الصالونات والسبا والحلاقين والمدربين بدون اتصال أو انتظار",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F6F7F9",
+  "theme_color": "#3B1A5C",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
