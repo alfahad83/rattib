@@ -1,9 +1,10 @@
 // لوحة صاحب المحل: تسجيل الدخول، تسجيل المحل، مواعيد اليوم، الإحصائيات، الإعدادات
 import { init, store, mode } from './store.js';
+import { countUp } from './motion.js';
 import { CAT_LABEL, esc, money, hourLabel, fullDate, today, isoDate, parseIso, uid, toast, ICON } from './common.js';
 
 const $app = document.getElementById('app');
-const S = { user: null, shop: null, bookings: [], tab: 'today', date: today(), authMode: 'login', draft: null, busy: false };
+const S = { user: null, shop: null, bookings: [], tab: 'today', date: today(), authMode: 'login', draft: null, busy: false, animate: true };
 
 const STATUS = { confirmed: 'مؤكد', wait: 'قائمة الانتظار', done: 'حضر', cancelled: 'ملغي', noshow: 'لم يحضر' };
 const blankShop = () => ({
@@ -28,14 +29,15 @@ function render() {
       <a class="side-btn" href="index.html" style="text-decoration:none">${ICON.home(18)}<span>صفحة العملاء</span></a>
       <button class="side-btn" data-act="logout">${ICON.logout(18)}<span>${mode === 'local' ? 'تصفير البيانات التجريبية' : 'تسجيل الخروج'}</span></button>
     </aside>
-    <main class="biz-main">${body}</main>
+    <main class="biz-main ${S.animate ? 'grow' : ''}">${body}</main>
   </div>`;
+  if (S.animate) { countUp($app); S.animate = false; }
 }
 
 function viewAuth() {
   const signup = S.authMode === 'signup';
   return `<div class="auth"><form class="card form" id="auth-form" style="padding:24px">
-    <div class="brand" style="padding:0"><div class="logo" style="color:#fff">ر</div><div><b>رتّب للأعمال</b><small style="color:var(--muted)">${signup ? 'سجّل محلك مجانًا' : 'دخول أصحاب المحلات'}</small></div></div>
+    <div class="brand" style="padding:0"><div class="logo">ر</div><div><b>رتّب للأعمال</b><small style="color:var(--muted)">${signup ? 'سجّل محلك مجانًا' : 'دخول أصحاب المحلات'}</small></div></div>
     <label class="field">البريد الإلكتروني<input name="email" type="email" required autocomplete="email"></label>
     <label class="field">كلمة المرور<input name="pass" type="password" required minlength="6" autocomplete="${signup ? 'new-password' : 'current-password'}"><span class="hint">6 خانات على الأقل</span></label>
     <button class="btn block" ${S.busy ? 'disabled' : ''}>${signup ? 'إنشاء حساب' : 'دخول'}</button>
@@ -67,10 +69,10 @@ function viewToday() {
       </div>
     </header>
     <div class="kpis">
-      <div class="kpi"><span>حجوزات اليوم</span><b>${active.length}</b><small>${active.filter((b) => b.people > 1).length} منها جماعية</small></div>
-      <div class="kpi"><span>الدخل المتوقع</span><b>${money(active.reduce((n, b) => n + (b.total || 0), 0))}</b><small>شامل الخصومات</small></div>
-      <div class="kpi"><span>الإشغال</span><b>${seats ? Math.round((used / seats) * 100) : 0}%</b><small>${used} من ${seats} مقعد</small></div>
-      <div class="kpi"><span>قائمة الانتظار</span><b>${waits.length}</b><small>أكّد لهم إذا فضى موعد</small></div>
+      <div class="kpi"><span>حجوزات اليوم</span><b data-count="${active.length}">${active.length}</b><small>${active.filter((b) => b.people > 1).length} منها جماعية</small></div>
+      <div class="kpi"><span>الدخل المتوقع</span><b data-count="${active.reduce((n, b) => n + (b.total || 0), 0)}" data-fmt="money">${money(active.reduce((n, b) => n + (b.total || 0), 0))}</b><small>شامل الخصومات</small></div>
+      <div class="kpi"><span>الإشغال</span><b data-count="${seats ? Math.round((used / seats) * 100) : 0}" data-fmt="pct">${seats ? Math.round((used / seats) * 100) : 0}%</b><small>${used} من ${seats} مقعد</small></div>
+      <div class="kpi"><span>قائمة الانتظار</span><b data-count="${waits.length}">${waits.length}</b><small>أكّد لهم إذا فضى موعد</small></div>
     </div>
     <section class="panel wide"><h2>مواعيد اليوم</h2>
       ${list.length ? `<div class="table-wrap"><table>
@@ -112,16 +114,16 @@ function viewStats() {
 
   return `<header class="biz-head"><div><h1>الإحصائيات</h1><span class="meta">آخر 30 يوم</span></div></header>
     <div class="kpis">
-      <div class="kpi"><span>مواعيد مكتملة</span><b>${done.length}</b><small>${noshow.length} لم يحضروا</small></div>
-      <div class="kpi"><span>الدخل</span><b>${money(done.reduce((n, b) => n + (b.total || 0), 0))}</b><small>من المواعيد المكتملة</small></div>
-      <div class="kpi"><span>نسبة الحضور</span><b>${attended}%</b><small>${S.shop.depositOn ? 'العربون مفعّل' : 'جرّب تفعيل العربون'}</small></div>
-      <div class="kpi"><span>عملاء رجعوا</span><b>${returning}%</b><small>زاروك أكثر من مرة</small></div>
+      <div class="kpi"><span>مواعيد مكتملة</span><b data-count="${done.length}">${done.length}</b><small>${noshow.length} لم يحضروا</small></div>
+      <div class="kpi"><span>الدخل</span><b data-count="${done.reduce((n, b) => n + (b.total || 0), 0)}" data-fmt="money">${money(done.reduce((n, b) => n + (b.total || 0), 0))}</b><small>من المواعيد المكتملة</small></div>
+      <div class="kpi"><span>نسبة الحضور</span><b data-count="${attended}" data-fmt="pct">${attended}%</b><small>${S.shop.depositOn ? 'العربون مفعّل' : 'جرّب تفعيل العربون'}</small></div>
+      <div class="kpi"><span>عملاء رجعوا</span><b data-count="${returning}" data-fmt="pct">${returning}%</b><small>زاروك أكثر من مرة</small></div>
     </div>
     <div class="panels">
       <section class="panel wide">
         <div class="biz-head"><h2>المواعيد المكتملة حسب الساعة</h2>
           <div class="legend"><span><i></i>عادي</span><span><i class="quiet"></i>ساعات الخصم</span></div></div>
-        ${done.length ? `<div class="bars">${hours.map((x) => `<div class="bar"><span>${x.n}</span><i class="${quietSet.has(x.h) && S.shop.quietOn ? 'quiet' : ''}" style="height:${Math.round((x.n / max) * 150) + 4}px"></i></div>`).join('')}</div>
+        ${done.length ? `<div class="bars">${hours.map((x, i) => `<div class="bar"><span>${x.n}</span><i class="${quietSet.has(x.h) && S.shop.quietOn ? 'quiet' : ''}" data-h style="--i:${i};height:${Math.round((x.n / max) * 150) + 4}px"></i></div>`).join('')}</div>
         <div class="bar-labels">${hours.map((x) => `<span>${x.h > 12 ? x.h - 12 : x.h}</span>`).join('')}</div>
         <p class="sub">أهدى وقت عندك: ${lowest.map(hourLabel).join(' و ')}. ${S.shop.quietOn ? 'تقدر تعدّل ساعات الخصم من الإعدادات.' : 'فعّل خصم الساعات الهادئة من الإعدادات عشان تعبّيه.'}</p>`
         : '<div class="empty">تظهر الإحصائيات بعد ما تكتمل أول المواعيد.</div>'}
@@ -227,9 +229,9 @@ async function loadBookings() {
 }
 
 const actions = {
-  tab: (v) => { S.tab = v; S.draft = null; render(); },
+  tab: (v) => { S.tab = v; S.draft = null; S.animate = true; render(); },
   authmode: () => { S.authMode = S.authMode === 'login' ? 'signup' : 'login'; render(); },
-  day: (v) => { const d = parseIso(S.date); d.setDate(d.getDate() + Number(v)); S.date = isoDate(d); render(); },
+  day: (v) => { const d = parseIso(S.date); d.setDate(d.getDate() + Number(v)); S.date = isoDate(d); S.animate = true; render(); },
   status: async (v, el) => {
     const b = S.bookings.find((x) => x.id === v);
     if (!b) return;
@@ -259,7 +261,7 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('change', (e) => {
-  if (e.target.id === 'date' && e.target.value) { S.date = e.target.value; render(); }
+  if (e.target.id === 'date' && e.target.value) { S.date = e.target.value; S.animate = true; render(); }
   if (e.target.name === 'open' || e.target.name === 'close') { readForm(); render(); }
 });
 
@@ -285,7 +287,7 @@ document.addEventListener('submit', async (e) => {
     await init({ anonymous: false });
     if (mode === 'local') document.getElementById('demo').hidden = false;
     store().onUser(async (u) => {
-      S.user = u; S.busy = false; S.draft = null;
+      S.user = u; S.busy = false; S.draft = null; S.animate = true;
       S.shop = u ? await store().myShop() : null;
       await loadBookings();
       render();

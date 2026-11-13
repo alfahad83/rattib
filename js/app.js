@@ -1,6 +1,7 @@
 // تطبيق العميل: تصفح المحلات، الحجز، قائمة الانتظار، حجوزاتي والنقاط
 import { init, store, mode } from './store.js';
 import { CATS, CAT_LABEL, COLORS, esc, money, hourLabel, nextDays, fullDate, today, daysBetween, toast, ICON } from './common.js';
+import { transition, tween, replay } from './motion.js';
 
 const $app = document.getElementById('app');
 const days = nextDays(7);
@@ -9,8 +10,12 @@ const REMINDER_DAYS = 21;
 const S = {
   screen: 'home', cat: 'all', q: '',
   shops: [], shop: null, svcId: null, dayIdx: 0, hour: null, people: 1, atHome: false, taken: {},
-  bookings: [], last: null, busy: false
+  bookings: [], last: null, busy: false,
+  nearest: [], intro: true, lastTotal: 0, bumpPeople: false
 };
+
+const ORDER = { home: 0, offers: 1, bookings: 2, shop: 3, done: 4 };
+let lastScreen = null;
 
 const color = (s) => COLORS[(s.color ?? 0) % COLORS.length];
 const minPrice = (s) => Math.min(...s.services.map((v) => Number(v.price) || 0));
@@ -21,13 +26,33 @@ const profile = () => { try { return JSON.parse(localStorage.getItem('rattib-pro
 /* ------------------------------ عرض ------------------------------ */
 function render() {
   const v = { home: viewHome, offers: viewOffers, bookings: viewBookings, shop: viewShop, done: viewDone }[S.screen] || viewHome;
-  $app.innerHTML = v() + (['home', 'offers', 'bookings'].includes(S.screen) ? nav() : '');
-  window.scrollTo(0, 0);
+  const changed = S.screen !== lastScreen;
+  const prev = lastScreen;
+  lastScreen = S.screen;
+  const paint = () => {
+    $app.innerHTML = v() + (['home', 'offers', 'bookings'].includes(S.screen) ? nav() : '');
+    if (changed) window.scrollTo(0, 0);
+    afterPaint();
+  };
+  if (changed && prev !== null) transition(paint, ORDER[S.screen] >= ORDER[prev] ? 'forward' : 'back');
+  else paint();
+}
+
+// حركات تعتمد على التغيير: عداد السعر، نبضة عدد الأشخاص، ختم التأكيد
+function afterPaint() {
+  if (S.screen === 'home' && S.intro) setTimeout(() => { S.intro = false; }, 1400);
+  if (S.screen === 'shop') {
+    const k = calc();
+    const el = document.getElementById('total');
+    if (el && k.svc) { tween(el, S.lastTotal || k.total, k.total, money); S.lastTotal = k.total; }
+    if (!k.svc) S.lastTotal = 0;
+    if (S.bumpPeople) { replay(document.getElementById('people'), 'bump'); S.bumpPeople = false; }
+  }
 }
 
 function nav() {
   const b = (id, icon, label) => `<button class="${S.screen === id ? 'on' : ''}" data-act="go" data-v="${id}" ${S.screen === id ? 'aria-current="page"' : ''}>${icon}<span>${label}</span></button>`;
-  return `<nav class="nav" aria-label="التنقل الرئيسي">${b('home', ICON.home(22), 'الرئيسية')}${b('offers', ICON.tag(22), 'العروض')}${b('bookings', ICON.cal(22), 'حجوزاتي')}</nav>`;
+  return `<nav class="nav" style="view-transition-name:nav" aria-label="التنقل الرئيسي">${b('home', ICON.home(22), 'الرئيسية')}${b('offers', ICON.tag(22), 'العروض')}${b('bookings', ICON.cal(22), 'حجوزاتي')}</nav>`;
 }
 
 function filteredShops() {
@@ -42,10 +67,10 @@ function filteredShops() {
 function shopCard(s) {
   const c = color(s);
   return `<button class="shop-card" data-act="open" data-v="${esc(s.id)}">
-    <div class="avatar" style="background:${c.tint};color:${c.ink}">${esc(initial(s))}</div>
+    <div class="avatar" style="background:${c.tint};color:${c.ink};${S.vtShop === s.id ? 'view-transition-name:shop-avatar' : ''}">${esc(initial(s))}</div>
     <div class="body">
       <span class="name">${esc(s.name)}</span>
-      <span class="meta">${esc(CAT_LABEL[s.cat] || '')} · ${esc(s.area)}</span>
+      <span class="meta">${esc(CAT_LABEL[s.cat] || '')} في ${esc(s.area)}</span>
       <div class="tags">
         <span class="from">يبدأ من ${money(minPrice(s))}</span>
         ${s.quietOn ? `<span class="tag offer">خصم العصر ${esc(s.quietPct)}%</span>` : ''}
@@ -62,14 +87,50 @@ function listHtml() {
   return list.map(shopCard).join('');
 }
 
+function ribbon() {
+  const nowTxt = new Date().toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
+  const anyToday = S.nearest.some((n) => n.di === 0);
+  return `<section class="ribbon" aria-labelledby="rb-h">
+    <div class="ribbon-head"><h2 id="rb-h">${anyToday ? 'أقرب المواعيد الفاضية' : 'أقرب المواعيد بكرة'}</h2><span class="now"><i></i>الحين ${esc(nowTxt)}</span></div>
+    <div class="axis"></div>
+    ${S.nearest.length ? `<div class="tickets">${S.nearest.map((n, i) => {
+      const p = minPrice(n.shop);
+      const price = n.quiet ? `من <b>${money(p * (1 - n.shop.quietPct / 100))}</b>` : `من ${money(p)}`;
+      return `<button class="ticket ${n.quiet ? 'quiet' : ''}" style="--i:${i}" data-act="slotopen" data-v="${esc(n.shop.id)}|${n.di}|${n.h}" aria-label="${esc(n.shop.name)}، ${days[n.di].label} ${hourLabel(n.h)}">
+        <span class="time">${hourLabel(n.h)}</span><span class="tday">${days[n.di].label}${n.quiet ? `، خصم ${esc(n.shop.quietPct)}%` : ''}</span>
+        <span class="shop">${esc(n.shop.name)}</span><span class="price">${price}</span>
+      </button>`;
+    }).join('')}</div>` : '<div class="ribbon-empty">ما فيه مواعيد فاضية قريبة. تصفح المحلات تحت واختر يوم ثاني.</div>'}
+  </section>`;
+}
+
+async function computeNearest() {
+  const nowH = new Date().getHours();
+  const out = [];
+  for (const di of [0, 1]) {
+    const iso = days[di].iso;
+    await Promise.all(S.shops.map(async (s) => {
+      let taken = {};
+      try { taken = await store().takenCounts(s.id, iso); } catch (e) { /* نتجاهل المحل */ }
+      for (let h = s.open; h < s.close; h++) {
+        if (di === 0 && h <= nowH) continue;
+        if ((taken[h] || 0) + 1 <= s.capacity) { out.push({ shop: s, di, h, quiet: isQuiet(s, h) }); break; }
+      }
+    }));
+    if (out.length >= 3) break;
+  }
+  return out.sort((a, b) => a.di - b.di || a.h - b.h).slice(0, 8);
+}
+
 function viewHome() {
   const pts = points();
   const anyQuiet = S.shops.some((s) => s.quietOn);
-  return `<main class="screen">
+  return `<main class="screen ${S.intro ? 'enter' : ''}">
     <div class="hello">
       <div><small>هلا وغلا</small><h1>وش تبي ترتّب اليوم؟</h1></div>
       <button class="pill-btn" data-act="go" data-v="bookings">${ICON.star(16)}<span>${pts} نقطة</span></button>
     </div>
+    ${ribbon()}
     <label class="search">${ICON.search(18)}
       <input id="q" type="search" value="${esc(S.q)}" placeholder="ابحث عن محل أو خدمة أو حي" aria-label="ابحث عن محل أو خدمة أو حي">
     </label>
@@ -77,8 +138,8 @@ function viewHome() {
       ${CATS.map((c) => `<button class="chip ${S.cat === c.id ? 'on' : ''}" data-act="cat" data-v="${c.id}" aria-pressed="${S.cat === c.id}">${c.label}</button>`).join('')}
     </div>
     ${anyQuiet ? `<button class="promo" data-act="go" data-v="offers">
-      <div style="flex:1"><span class="k">عروض الساعات الهادئة</span><span class="t">خصومات على مواعيد العصر</span><span class="s">محلات تنزّل أسعار الأوقات الهادئة</span></div>
-      ${ICON.tag(40)}</button>` : ''}
+      ${ICON.tag(32)}<div style="flex:1"><span class="t">خصومات على الساعات الهادئة</span><span class="s">محلات تنزّل أسعار الأوقات اللي ما عليها زحمة</span></div>
+      </button>` : ''}
     <div class="row-head"><h2>المحلات</h2><span id="count">${filteredShops().length} محل</span></div>
     <div class="list" id="list">${listHtml()}</div>
   </main>`;
@@ -180,9 +241,9 @@ function viewShop() {
   return `<header class="topbar"><button class="icon-btn" data-act="go" data-v="home" aria-label="رجوع">${ICON.back(20)}</button><b>${esc(shop.name)}</b></header>
   <main class="screen shop-screen">
     <div class="shop-head">
-      <div class="avatar lg" style="background:${c.tint};color:${c.ink}">${esc(initial(shop))}</div>
+      <div class="avatar lg" style="background:${c.tint};color:${c.ink};view-transition-name:shop-avatar">${esc(initial(shop))}</div>
       <div><h1>${esc(shop.name)}</h1>
-        <div class="meta">${ICON.pin(14)}<span>${esc(CAT_LABEL[shop.cat] || '')} · ${esc(shop.area)}</span></div>
+        <div class="meta">${ICON.pin(14)}<span>${esc(CAT_LABEL[shop.cat] || '')} في ${esc(shop.area)}</span></div>
         <div class="meta">${ICON.clock(14)}<span>${hourLabel(shop.open)} – ${hourLabel(shop.close)}</span></div>
       </div>
     </div>
@@ -201,7 +262,7 @@ function viewShop() {
 
     <section class="section"><h2>${ICON.users(20)} حجز جماعي</h2>
       <div class="stepper-row"><span>للعرسان والصديقات: أكثر من شخص بنفس الموعد</span>
-        <div class="stepper"><button data-act="inc" aria-label="زيادة شخص">+</button><b aria-live="polite">${S.people}</b><button data-act="dec" aria-label="إنقاص شخص">−</button></div>
+        <div class="stepper"><button data-act="inc" aria-label="زيادة شخص">+</button><b id="people" aria-live="polite">${S.people}</b><button data-act="dec" aria-label="إنقاص شخص">−</button></div>
       </div>
     </section>
 
@@ -222,7 +283,7 @@ function viewShop() {
   <div class="checkout">
     <div class="sum">
       <div><b>${esc(svcName)}</b><span>${k.hasHour ? `${fullDate(day.iso)} · ${hourLabel(S.hour)}` : 'اختر اليوم والوقت'}</span></div>
-      <div class="total"><b>${k.svc ? money(k.total) : '—'}</b>${k.discount ? `<em>وفّرت ${money(k.discount)}</em>` : ''}</div>
+      <div class="total"><b id="total">${k.svc ? money(k.total) : '—'}</b>${k.discount ? `<em>وفّرت ${money(k.discount)}</em>` : ''}</div>
     </div>
     ${k.full
       ? `<button class="btn warn block" data-act="wait" ${k.svc && !S.busy ? '' : 'disabled'}>انضم لقائمة الانتظار</button>`
@@ -234,7 +295,10 @@ function viewShop() {
 function viewDone() {
   const b = S.last; const wait = b.status === 'wait';
   return `<main class="screen done">
-    <div class="done-badge ${wait ? 'wait' : ''}">${wait ? ICON.clock(40) : ICON.check(42)}</div>
+    <div class="stamp stamp-anim ${wait ? 'wait' : ''}" aria-hidden="true"><svg viewBox="0 0 112 112" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+      <circle class="ring" cx="56" cy="56" r="48" stroke-width="6" transform="rotate(-90 56 56)"/>
+      ${wait ? '<path class="mark" d="M56 32v26l16 10" stroke-width="7"/>' : '<path class="mark" d="M36 58l14 14 27-30" stroke-width="8"/>'}
+    </svg></div>
     <div><h1 class="title">${wait ? 'أنت في قائمة الانتظار' : 'تم الحجز'}</h1>
     <p class="sub">${wait ? 'إذا فضى الموعد يأكده لك المحل، وتشوف الحالة في حجوزاتي.' : 'موعدك مؤكد، وتلقاه في حجوزاتي.'}</p></div>
     <div class="card" style="width:100%;text-align:right">
@@ -256,12 +320,14 @@ async function loadTaken() {
   try { S.taken = await store().takenCounts(S.shop.id, days[S.dayIdx].iso); } catch (e) { console.error(e); S.taken = {}; }
 }
 
-async function openShop(id, svcId = null) {
+async function openShop(id, svcId = null, dayIdx = 0, hour = null) {
   const shop = S.shops.find((s) => s.id === id) || await store().getShop(id);
   if (!shop) return toast('المحل غير متاح');
-  Object.assign(S, { screen: 'shop', shop, svcId, dayIdx: 0, hour: null, people: 1, atHome: false, taken: {} });
+  S.vtShop = shop.id;
+  if (!svcId && shop.services.length === 1) svcId = shop.services[0].id;
+  Object.assign(S, { screen: 'shop', shop, svcId, dayIdx, hour, people: 1, atHome: false, taken: {}, lastTotal: 0 });
+  await loadTaken();
   render();
-  await loadTaken(); render();
 }
 
 function askProfile() {
@@ -294,6 +360,7 @@ async function book(status) {
       date: days[S.dayIdx].iso, hour: S.hour, discount: k.discount, homeFee: k.homeFee, total: k.total, deposit: k.deposit, status
     });
     S.bookings.push(rec); S.last = rec; S.screen = 'done';
+    computeNearest().then((n) => { S.nearest = n; });
   } catch (e) {
     console.error(e);
     if (e.message === 'FULL') { toast('سبقك أحد على هذا الموعد، اختر وقت ثاني'); await loadTaken(); S.hour = null; }
@@ -308,8 +375,9 @@ const actions = {
   open: (v) => openShop(v),
   svc: (v) => { S.svcId = v; render(); },
   home: () => { S.atHome = !S.atHome; render(); },
-  inc: () => { S.people = Math.min(6, S.people + 1); render(); },
-  dec: () => { S.people = Math.max(1, S.people - 1); render(); },
+  inc: () => { S.people = Math.min(6, S.people + 1); S.bumpPeople = true; render(); },
+  dec: () => { S.people = Math.max(1, S.people - 1); S.bumpPeople = true; render(); },
+  slotopen: (v) => { const [id, di, h] = v.split('|'); openShop(id, null, Number(di), Number(h)); },
   day: async (v) => { S.dayIdx = Number(v); S.hour = null; render(); await loadTaken(); render(); },
   hour: (v) => { S.hour = Number(v); render(); },
   confirm: () => book('confirmed'),
@@ -343,6 +411,7 @@ document.addEventListener('input', (e) => {
     await init({ anonymous: true });
     if (mode === 'local') document.getElementById('demo').hidden = false;
     [S.shops, S.bookings] = await Promise.all([store().listShops(), store().myBookings()]);
+    S.nearest = await computeNearest();
     const shopParam = new URLSearchParams(location.search).get('shop');
     render();
     if (shopParam) openShop(shopParam);
